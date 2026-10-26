@@ -22,6 +22,10 @@ private:
     string outBuffer;
     bool closed;
     bool keepAlive;
+    static const int TIMEOUT_MS = 15000; // 空闲超时时间（15 秒）
+
+    // 刷新该连接在定时器堆中的过期时间，实现惰性续期
+    void extendLife();
 
 public:
     Connection(Eventloop &newloop, int newclientfd);
