@@ -21,8 +21,7 @@ Connection::~Connection()
     }
 }
 void Connection::handleClose()
-{
-    if (closed)
+{    if (closed)
         return;
     LOG_INFO("Client closed , fd = " + to_string(clientfd));
     // close(clientfd);
@@ -33,8 +32,21 @@ void Connection::handleClose()
     loop.remove_channel(clientfd);
 }
 
+void Connection::extendLife()
+{
+    if (closed)
+        return;
+    // 每次读写活动都重置倒计时（只更新堆中的过期时间，不重建节点）
+    loop.refresh_timer(clientfd, TIMEOUT_MS, [this]
+                       {
+                           LOG_INFO("Connection timeout , kicking zombie client fd = " + to_string(clientfd));
+                           handleClose();
+                       });
+}
+
 void Connection::handleWrite()
 {
+    extendLife(); // 更新倒计时
     while (!outBuffer.empty())
     {
         ssize_t n = send(clientfd, outBuffer.data(), outBuffer.size(),
@@ -138,6 +150,7 @@ void Connection::serverRequst(const HttpRequest &req)
 
 void Connection::handleRead()
 {
+    extendLife(); // 更新倒计时
     char buf[4096];
 
     // 将所有数据读入 inBuffer
@@ -205,4 +218,5 @@ void Connection::start()
     ptrChannel->set_write_callback([this]
                                    { handleWrite(); });
     loop.add_channel(move(ptrChannel));
+    extendLife(); // 连接建立后立即注册定时器，防止静默连接永远不会被踢
 }
